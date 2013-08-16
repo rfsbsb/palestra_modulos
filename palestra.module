@@ -1,0 +1,150 @@
+<?php
+
+/**
+* @file
+* Módulo feito para a palestra da Fisqua
+*/
+define('BOVESPA_URL', 'http://rafaelsilva.net/random.php?p=');
+
+/**
+* Implementa hook_block_info().
+*
+* Declaração dos blocos usados pelo módulo.
+*
+* @return
+* Retorna o array de informação dos blocos.
+*/
+function palestra_block_info() {
+
+  $blocks['palestra_bovespa'] = array(
+    'info' => t('Índice da bolsa'),
+    'status' => TRUE,
+    'region' => 'sidebar_first', // Definindo um bloco
+    'visibility' => BLOCK_VISIBILITY_LISTED, // Definindo visibilidade
+    'pages' => '<front>', // Dada a visibilidade, escolhemos onde.
+  );
+
+  return $blocks;
+}
+
+/**
+* Implementa hook_block_configure().
+*
+* Configuração dos blocos providos pelo módulo.
+*
+* @param $delta
+* O nome do bloco que está sendo configurado.
+*
+* @return
+* Retorna os campos adicionais para o nosso bloco.
+*/
+function palestra_block_configure($delta = '') {
+
+  $form = array();
+  if ($delta == 'palestra_bovespa') {
+    $form['palestra_bovespa_papel'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Papel na Bovespa'),
+      '#size' => 20,
+      '#description' => t('Digite o nome do papel na Bovespa.'),
+      '#default_value' => variable_get('palestra_bovespa_papel', ''),
+    );
+  }
+
+  return $form;
+}
+
+/**
+* Implementa hook_block_save().
+*
+* Diz como irá salvar as configurações. Você pode gravar essas informações
+* em qualquer meio, aqui iremos gravar na tabela de variáveis.
+*
+* @param $delta
+* O nome do bloco que está sendo configurado.
+*
+* @param $edit
+* Os dados enviados pelo formulário a ser salvo.
+*/
+function palestra_block_save($delta = '', $edit = array()) {
+  if ($delta == 'palestra_bovespa') {
+    variable_set('palestra_bovespa_papel', $edit['palestra_bovespa_papel']);
+  }
+}
+
+/**
+* Implementa hook_block_view().
+*
+* Exibe o nosso bloco.
+*
+* @param $delta
+* O nome do bloco que está sendo configurado.
+*
+* @return
+* Retorna o bloco para renderização.
+*/
+function palestra_block_view($delta = '') {
+  $block = array();
+  switch ($delta) {
+    case 'palestra_bovespa':
+      $papel = variable_get('palestra_bovespa_papel', '');
+      if (!empty($papel)) {
+        $block['subject'] = t('Papéis na Bovespa');
+        $block['content'] = palestra_bovespa();
+      }
+
+      break;
+  }
+  return $block;
+}
+
+
+/**
+* Função que carrega o papel informado no bloco.
+*
+* Os dados podem vir do cache, caso existam lá, senão fazemos o carregamento
+* na hora.
+*
+* @return
+* Retorna o conteúdo do bloco
+*/
+function palestra_bovespa() {
+  // Se há dados no cache, carregamos ele.
+  if ($cache = cache_get('palestra_papel_cache')) {
+    $values = $cache->data;
+  }
+  // Caso não hajam dados no cache, fazemos a chamada remota.
+  else {
+    $values = palestra_get_papel_remoto();
+    cache_set('palestra_papel_cache', $values);
+  }
+
+  if (is_array($values) && !empty($values)) {
+    $rows[] = $values;
+    $header = array(t("Papel"), t("Valor"), t("Oscilação"));
+    $output = theme('table', array('header' => $header, 'rows' => $rows));
+    return array('#markup' => $output);
+  }
+}
+
+
+/**
+*
+* Função que busca os dados remotamente.
+*
+*/
+function palestra_get_papel_remoto() {
+  // Pegamos a variável e se tiver algo, carregamos.
+  $papel_id = variable_get('palestra_bovespa_papel', '');
+  $values = null;
+  if (!empty($papel_id)) {
+    $xml = file_get_contents(BOVESPA_URL . $papel_id);
+    $papel = new SimpleXMLElement($xml);
+    // Se o resultado é um papel válido, carregamos.
+    if (isset($papel->PAPEL) && is_object($papel->PAPEL)) {
+      // Precisamos fazer o typecasting para habilitar serialização no cache.
+      $values = array($papel_id, (string)$papel->PAPEL['VALOR_ULTIMO'], (string)$papel->PAPEL['OSCILACAO']);
+    }
+  }
+  return $values;
+}

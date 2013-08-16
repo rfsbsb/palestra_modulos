@@ -1,0 +1,4 @@
+name = Palestra de módulos
+description = Módulo para demonstração
+core = 7.x
+package = Fisqua
